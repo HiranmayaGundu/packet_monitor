@@ -10,7 +10,7 @@ use dev_parser::Device;
 pub mod dev_parser;
 
 const BOUND_IP_ADDR: &'static str = "10.1.3.3:0";
-const CAPACITY: u64 = 100 * 10_u64.pow(6) / 8;
+const CAPACITY: u64 = 100 * 10_u64.pow(6);
 
 fn main() {
     // println!("Hello, world!");
@@ -117,8 +117,13 @@ fn main() {
                     .as_bytes(),
                 )
                 .expect("Failed to write data");
-                let transmit_capacity = receive_bytes / CAPACITY * 100;
-                let receive_capacity = transmit_bytes / CAPACITY * 100;
+                let transmit_capacity = (receive_bytes * 8) / CAPACITY * 100;
+                let receive_capacity = (transmit_bytes * 8) / CAPACITY * 100;
+
+                println!(
+                    "Transmit capacity: {}, receive capacity: {}",
+                    transmit_capacity, receive_capacity
+                );
 
                 if transmit_capacity >= 90 || receive_capacity >= 90 {
                     println!(
