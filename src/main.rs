@@ -145,6 +145,7 @@ fn main() {
                             .as_secs_f64()
                     );
                 }
+                old_stats = device;
             }
         }
         thread::sleep(Duration::from_secs(1));
