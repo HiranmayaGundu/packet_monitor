@@ -122,11 +122,6 @@ fn main() {
                 let receive_capacity =
                     ((transmit_bytes as f64 * 8_f64) / (CAPACITY as f64)) * 100_f64;
 
-                println!(
-                    "Transmit bytes: {} ({:.2}%)",
-                    transmit_bytes, transmit_capacity
-                );
-
                 if transmit_capacity >= 90.0 || receive_capacity >= 90.0 {
                     println!(
                         ">= 90% capacity {}",
