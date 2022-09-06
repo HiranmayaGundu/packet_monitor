@@ -117,15 +117,17 @@ fn main() {
                     .as_bytes(),
                 )
                 .expect("Failed to write data");
-                let transmit_capacity = (receive_bytes * 8) / CAPACITY * 100;
-                let receive_capacity = (transmit_bytes * 8) / CAPACITY * 100;
+                let transmit_capacity =
+                    (receive_bytes as f64 * 8_f64) / (CAPACITY as f64 * 100_f64);
+                let receive_capacity =
+                    (transmit_bytes as f64 * 8_f64) / (CAPACITY as f64 * 100_f64);
 
                 println!(
                     "Transmit capacity: {}, receive capacity: {}",
                     transmit_capacity, receive_capacity
                 );
 
-                if transmit_capacity >= 90 || receive_capacity >= 90 {
+                if transmit_capacity >= 90.0 || receive_capacity >= 90.0 {
                     println!(
                         ">= 90% capacity {}",
                         SystemTime::now()
@@ -133,7 +135,7 @@ fn main() {
                             .unwrap()
                             .as_secs_f64()
                     );
-                } else if transmit_capacity >= 80 || receive_capacity >= 80 {
+                } else if transmit_capacity >= 80.0 || receive_capacity >= 80.0 {
                     println!(
                         ">= 80% capacity {}",
                         SystemTime::now()
@@ -141,7 +143,7 @@ fn main() {
                             .unwrap()
                             .as_secs_f64()
                     );
-                } else if transmit_capacity >= 50 || receive_capacity >= 50 {
+                } else if transmit_capacity >= 50.0 || receive_capacity >= 50.0 {
                     println!(
                         ">= 50% capacity {}",
                         SystemTime::now()
