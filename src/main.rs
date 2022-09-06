@@ -11,7 +11,7 @@ const BOUND_IP_ADDR: &'static str = "10.1.3.3:0";
 const CAPACITY: u64 = 100 * 10_u64.pow(6) / 8;
 
 fn main() {
-    println!("Hello, world!");
+    // println!("Hello, world!");
     if cfg!(target_os = "linux") != true {
         panic!("This program only works on Linux");
     }
@@ -55,7 +55,7 @@ fn main() {
         .open("dump.tsv")
         .unwrap();
 
-    file.write_all(b"#tsv time txpkts txbytes rxpkts rxbytes")
+    file.write_all(b"#tsv\ttime\ttxpkts\ttxbytes\trxpkts\trxbytes\n")
         .expect("Failed to write header");
 
     let interfaces = nix::ifaddrs::getifaddrs().unwrap();
@@ -80,14 +80,21 @@ fn main() {
         }
     }
 
+    let mut old_stats: Device 
+    for device in device {
+        if device.interface == interface_name {
+            old_stats = device;
+        }
+    }
+
     loop {
         let devices = dev_parser::get();
         for device in devices {
             if device.interface == interface_name {
-                println!("{}: {}", device.interface, device.receive_bytes);
+                // println!("{}: {}", device.interface, device.receive_bytes);
                 file.write_all(
                     format!(
-                        "{} {} {} {} {}",
+                        "{}\t{}\t{}\t{}\t{}\n",
                         SystemTime::now()
                             .duration_since(SystemTime::UNIX_EPOCH)
                             .unwrap()
