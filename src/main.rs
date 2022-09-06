@@ -1,8 +1,14 @@
-use std::{thread, time::Duration};
+use std::{
+    fs::OpenOptions,
+    io::Write,
+    thread,
+    time::{Duration, SystemTime},
+};
 
 pub mod dev_parser;
 
 const BOUND_IP_ADDR: &'static str = "10.1.3.3:0";
+const CAPACITY: u64 = 100 * 10_u64.pow(6) / 8;
 
 fn main() {
     println!("Hello, world!");
@@ -41,12 +47,23 @@ fn main() {
     //     println!("Interface: {}", ifa_name);
     // }
 
+    let mut file = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .open("dump.tsv")
+        .unwrap();
+
+    file.write_all(b"#tsv time txpkts txbytes rxpkts rxbytes")
+        .expect("Failed to write header");
+
     let interfaces = nix::ifaddrs::getifaddrs().unwrap();
     let mut interface_name = String::new();
     for interface in interfaces {
         match interface.address {
             Some(address) => {
-                println!("interface {} address {}", interface.interface_name, address);
+                // println!("interface {} address {}", interface.interface_name, address);
                 if address.to_string() == BOUND_IP_ADDR {
                     interface_name = interface.interface_name;
                 }
@@ -55,25 +72,65 @@ fn main() {
                 // }
             }
             None => {
-                println!(
-                    "interface {} with unsupported address family",
-                    interface.interface_name
-                );
+                // println!(
+                //     "interface {} with unsupported address family",
+                //     interface.interface_name
+                // );
             }
         }
     }
 
-    println!("Interface name: {}", interface_name);
     loop {
         let devices = dev_parser::get();
         for device in devices {
             if device.interface == interface_name {
                 println!("{}: {}", device.interface, device.receive_bytes);
+                file.write_all(
+                    format!(
+                        "{} {} {} {} {}",
+                        SystemTime::now()
+                            .duration_since(SystemTime::UNIX_EPOCH)
+                            .unwrap()
+                            .as_secs_f64(),
+                        device.transmit_packets,
+                        device.transmit_bytes,
+                        device.receive_packets,
+                        device.receive_bytes
+                    )
+                    .as_bytes(),
+                )
+                .expect("Failed to write data");
+                let transmit_capacity = device.receive_bytes / CAPACITY * 100;
+                let receive_capacity = device.transmit_bytes / CAPACITY * 100;
+
+                if transmit_capacity >= 90 || receive_capacity >= 90 {
+                    println!(
+                        ">= 90% capacity {}",
+                        SystemTime::now()
+                            .duration_since(SystemTime::UNIX_EPOCH)
+                            .unwrap()
+                            .as_secs_f64()
+                    );
+                } else if transmit_capacity >= 80 || receive_capacity >= 80 {
+                    println!(
+                        ">= 80% capacity {}",
+                        SystemTime::now()
+                            .duration_since(SystemTime::UNIX_EPOCH)
+                            .unwrap()
+                            .as_secs_f64()
+                    );
+                } else if transmit_capacity >= 50 || receive_capacity >= 50 {
+                    println!(
+                        ">= 50% capacity {}",
+                        SystemTime::now()
+                            .duration_since(SystemTime::UNIX_EPOCH)
+                            .unwrap()
+                            .as_secs_f64()
+                    );
+                }
             }
-            // println!("{:?}", device);
         }
         thread::sleep(Duration::from_secs(1));
-        println!("\n\n\n 1 sec up!! \n\n")
     }
 
     // let contents =
