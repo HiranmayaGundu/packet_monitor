@@ -35,6 +35,30 @@ pub fn get() -> Vec<Device> {
     return parse(reader.lines());
 }
 
+impl Device {
+    pub fn new() -> Device {
+        Device {
+            interface: String::new(),
+            receive_bytes: 0,
+            receive_compressed: 0,
+            receive_drop: 0,
+            receive_errs: 0,
+            receive_fifo: 0,
+            receive_frame: 0,
+            receive_multicast: 0,
+            receive_packets: 0,
+            transmit_bytes: 0,
+            transmit_carrier: 0,
+            transmit_colls: 0,
+            transmit_compressed: 0,
+            transmit_drop: 0,
+            transmit_errs: 0,
+            transmit_fifo: 0,
+            transmit_packets: 0,
+        }
+    }
+}
+
 fn parse(mut lines: Lines<BufReader<File>>) -> Vec<Device> {
     let mut devices: Vec<Device> = Vec::new();
     lines.next();

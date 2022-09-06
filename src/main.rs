@@ -5,6 +5,8 @@ use std::{
     time::{Duration, SystemTime},
 };
 
+use dev_parser::Device;
+
 pub mod dev_parser;
 
 const BOUND_IP_ADDR: &'static str = "10.1.3.3:0";
@@ -80,11 +82,16 @@ fn main() {
         }
     }
 
-    let mut old_stats: Device 
-    for device in device {
+    let mut old_stats = Device::new();
+    let devices = dev_parser::get();
+    for device in devices {
         if device.interface == interface_name {
             old_stats = device;
         }
+    }
+
+    if old_stats.interface.is_empty() {
+        panic!("Could not find interface {}", interface_name);
     }
 
     loop {
@@ -92,6 +99,9 @@ fn main() {
         for device in devices {
             if device.interface == interface_name {
                 // println!("{}: {}", device.interface, device.receive_bytes);
+
+                let transmit_bytes = device.transmit_bytes - old_stats.transmit_bytes;
+                let receive_bytes = device.receive_bytes - old_stats.receive_bytes;
                 file.write_all(
                     format!(
                         "{}\t{}\t{}\t{}\t{}\n",
@@ -99,16 +109,16 @@ fn main() {
                             .duration_since(SystemTime::UNIX_EPOCH)
                             .unwrap()
                             .as_secs_f64(),
-                        device.transmit_packets,
-                        device.transmit_bytes,
-                        device.receive_packets,
-                        device.receive_bytes
+                        device.transmit_packets - old_stats.transmit_packets,
+                        transmit_bytes,
+                        device.receive_packets - old_stats.receive_packets,
+                        receive_bytes
                     )
                     .as_bytes(),
                 )
                 .expect("Failed to write data");
-                let transmit_capacity = device.receive_bytes / CAPACITY * 100;
-                let receive_capacity = device.transmit_bytes / CAPACITY * 100;
+                let transmit_capacity = receive_bytes / CAPACITY * 100;
+                let receive_capacity = transmit_bytes / CAPACITY * 100;
 
                 if transmit_capacity >= 90 || receive_capacity >= 90 {
                     println!(
