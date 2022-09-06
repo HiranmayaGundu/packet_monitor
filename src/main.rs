@@ -118,13 +118,13 @@ fn main() {
                 )
                 .expect("Failed to write data");
                 let transmit_capacity =
-                    (receive_bytes as f64 * 8_f64) / (CAPACITY as f64 * 100_f64);
+                    ((receive_bytes as f64 * 8_f64) / (CAPACITY as f64)) * 100_f64;
                 let receive_capacity =
-                    (transmit_bytes as f64 * 8_f64) / (CAPACITY as f64 * 100_f64);
+                    ((transmit_bytes as f64 * 8_f64) / (CAPACITY as f64)) * 100_f64;
 
                 println!(
-                    "Transmit capacity: {}, receive capacity: {}",
-                    transmit_capacity, receive_capacity
+                    "Transmit bytes: {} ({:.2}%)",
+                    transmit_bytes, transmit_capacity
                 );
 
                 if transmit_capacity >= 90.0 || receive_capacity >= 90.0 {
