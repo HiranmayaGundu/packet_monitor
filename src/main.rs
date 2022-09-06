@@ -2,7 +2,7 @@ use std::{thread, time::Duration};
 
 pub mod dev_parser;
 
-const BOUND_IP_ADDR: &'static str = "10.1.3.3:24";
+const BOUND_IP_ADDR: &'static str = "10.1.3.3:0";
 
 fn main() {
     println!("Hello, world!");
@@ -47,12 +47,12 @@ fn main() {
         match interface.address {
             Some(address) => {
                 println!("interface {} address {}", interface.interface_name, address);
-                // if address.to_string() == BOUND_IP_ADDR {
-                //     interface_name = interface.interface_name;
-                // }
-                if address.to_string() == "127.0.0.1:0" {
+                if address.to_string() == BOUND_IP_ADDR {
                     interface_name = interface.interface_name;
                 }
+                // if address.to_string() == "127.0.0.1:0" {
+                //     interface_name = interface.interface_name;
+                // }
             }
             None => {
                 println!(
