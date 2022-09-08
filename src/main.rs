@@ -41,6 +41,10 @@ fn main() {
         }
     }
 
+    if interface_name.is_empty() {
+        panic!("Could not find interface with IP address {}", BOUND_IP_ADDR);
+    }
+
     let mut old_stats = Device::new();
     let devices = dev_parser::get();
     for device in devices {
