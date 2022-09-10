@@ -86,14 +86,15 @@ fn main() {
             if device.interface == interface_name {
                 let transmit_bytes = device.transmit_bytes - old_stats.transmit_bytes;
                 let receive_bytes = device.receive_bytes - old_stats.receive_bytes;
+                let time_now = SystemTime::now()
+                    .duration_since(SystemTime::UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs_f64();
                 dump_file
                     .write_all(
                         format!(
                             "{}\t{}\t{}\t{}\t{}\n",
-                            SystemTime::now()
-                                .duration_since(SystemTime::UNIX_EPOCH)
-                                .unwrap()
-                                .as_secs_f64(),
+                            time_now,
                             device.transmit_packets - old_stats.transmit_packets,
                             transmit_bytes,
                             device.receive_packets - old_stats.receive_packets,
@@ -109,47 +110,17 @@ fn main() {
 
                 if transmit_capacity >= 90.0 || receive_capacity >= 90.0 {
                     if capacity_kind != CapacityKind::NinetyPercent {
-                        println!(
-                            ">= 90% capacity {}",
-                            SystemTime::now()
-                                .duration_since(SystemTime::UNIX_EPOCH)
-                                .unwrap()
-                                .as_secs_f64()
-                        );
+                        println!(">= 90% capacity {}", time_now);
                         events_file
-                            .write_all(
-                                format!(
-                                    "{}\t>= 90%\t",
-                                    SystemTime::now()
-                                        .duration_since(SystemTime::UNIX_EPOCH)
-                                        .unwrap()
-                                        .as_secs_f64(),
-                                )
-                                .as_bytes(),
-                            )
+                            .write_all(format!("{}\t>= 90%\t", time_now).as_bytes())
                             .expect("Failed to write data");
                         capacity_kind = CapacityKind::NinetyPercent;
                     }
                 } else if transmit_capacity >= 80.0 || receive_capacity >= 80.0 {
                     if capacity_kind != CapacityKind::EightyPercent {
-                        println!(
-                            ">= 80% capacity {}",
-                            SystemTime::now()
-                                .duration_since(SystemTime::UNIX_EPOCH)
-                                .unwrap()
-                                .as_secs_f64()
-                        );
+                        println!(">= 80% capacity {}", time_now);
                         events_file
-                            .write_all(
-                                format!(
-                                    "{}\t>= 80%\t",
-                                    SystemTime::now()
-                                        .duration_since(SystemTime::UNIX_EPOCH)
-                                        .unwrap()
-                                        .as_secs_f64(),
-                                )
-                                .as_bytes(),
-                            )
+                            .write_all(format!("{}\t>= 80%\t", time_now).as_bytes())
                             .expect("Failed to write data");
                         capacity_kind = CapacityKind::EightyPercent;
                     }
@@ -163,39 +134,15 @@ fn main() {
                                 .as_secs_f64()
                         );
                         events_file
-                            .write_all(
-                                format!(
-                                    "{}\t>= 50%\t",
-                                    SystemTime::now()
-                                        .duration_since(SystemTime::UNIX_EPOCH)
-                                        .unwrap()
-                                        .as_secs_f64(),
-                                )
-                                .as_bytes(),
-                            )
+                            .write_all(format!("{}\t>= 50%\t", time_now).as_bytes())
                             .expect("Failed to write data");
                         capacity_kind = CapacityKind::FiftyPercent;
                     }
                 } else if capacity_kind != CapacityKind::BelowFiftyPercent {
                     capacity_kind = CapacityKind::BelowFiftyPercent;
-                    println!(
-                        "< 50% capacity {}",
-                        SystemTime::now()
-                            .duration_since(SystemTime::UNIX_EPOCH)
-                            .unwrap()
-                            .as_secs_f64()
-                    );
+                    println!("< 50% capacity {}", time_now);
                     events_file
-                        .write_all(
-                            format!(
-                                "{}\t< 50%\t",
-                                SystemTime::now()
-                                    .duration_since(SystemTime::UNIX_EPOCH)
-                                    .unwrap()
-                                    .as_secs_f64(),
-                            )
-                            .as_bytes(),
-                        )
+                        .write_all(format!("{}\t< 50%\t", time_now).as_bytes())
                         .expect("Failed to write data");
                 }
                 old_stats = device;
