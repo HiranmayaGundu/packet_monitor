@@ -36,6 +36,7 @@ fn main() {
     file.write_all(b"#tsv\ttime\ttxpkts\ttxbytes\trxpkts\trxbytes\n")
         .expect("Failed to write header");
 
+    // Usage of external nix crate
     let interfaces = nix::ifaddrs::getifaddrs().unwrap();
     let mut interface_name = String::new();
     for interface in interfaces {
