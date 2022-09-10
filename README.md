@@ -66,4 +66,5 @@ This puts the built binary in `target/x86_64-unknown-linux-gnu/release/`.
 ./proja
 ```
 
-The tsv file that is generated is called `dump.tsv`
+The data tsv file that is generated is called `dump.tsv`
+The extreme events file is called `events.tsv`. These events are also printed to stdout.

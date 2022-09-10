@@ -30,4 +30,4 @@ clean:
 all: build move
  
 help:
-	@echo "usage: make $(prog) [debug=1]"
+	@echo "usage: make [debug=1]"
