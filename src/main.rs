@@ -119,7 +119,7 @@ fn main() {
                         events_file
                             .write_all(
                                 format!(
-                                    "{}\t>= 90% capacity\t",
+                                    "{}\t>= 90%\t",
                                     SystemTime::now()
                                         .duration_since(SystemTime::UNIX_EPOCH)
                                         .unwrap()
@@ -142,7 +142,7 @@ fn main() {
                         events_file
                             .write_all(
                                 format!(
-                                    "{}\t>= 80% capacity\t",
+                                    "{}\t>= 80%\t",
                                     SystemTime::now()
                                         .duration_since(SystemTime::UNIX_EPOCH)
                                         .unwrap()
@@ -165,7 +165,7 @@ fn main() {
                         events_file
                             .write_all(
                                 format!(
-                                    "{}\t>= 50% capacity\t",
+                                    "{}\t>= 50%\t",
                                     SystemTime::now()
                                         .duration_since(SystemTime::UNIX_EPOCH)
                                         .unwrap()
@@ -188,7 +188,7 @@ fn main() {
                     events_file
                         .write_all(
                             format!(
-                                "{}\t< 50% capacity\t",
+                                "{}\t< 50%\t",
                                 SystemTime::now()
                                     .duration_since(SystemTime::UNIX_EPOCH)
                                     .unwrap()
