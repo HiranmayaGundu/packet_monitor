@@ -25,7 +25,7 @@ fn main() {
         panic!("This program only works on Linux");
     }
 
-    let mut file = OpenOptions::new()
+    let mut dump_file = OpenOptions::new()
         .read(true)
         .write(true)
         .create(true)
@@ -33,8 +33,21 @@ fn main() {
         .open("dump.tsv")
         .unwrap();
 
-    file.write_all(b"#tsv\ttime\ttxpkts\ttxbytes\trxpkts\trxbytes\n")
+    dump_file
+        .write_all(b"#tsv\ttime\ttxpkts\ttxbytes\trxpkts\trxbytes\n")
         .expect("Failed to write header");
+
+    let mut events_file = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .open("#tsv\ttime\tevent")
+        .unwrap();
+
+    events_file
+        .write_all(b"timestamp\tcapacity\tkind")
+        .expect("The events header failed to write");
 
     // Usage of external nix crate
     let interfaces = nix::ifaddrs::getifaddrs().unwrap();
@@ -73,21 +86,22 @@ fn main() {
             if device.interface == interface_name {
                 let transmit_bytes = device.transmit_bytes - old_stats.transmit_bytes;
                 let receive_bytes = device.receive_bytes - old_stats.receive_bytes;
-                file.write_all(
-                    format!(
-                        "{}\t{}\t{}\t{}\t{}\n",
-                        SystemTime::now()
-                            .duration_since(SystemTime::UNIX_EPOCH)
-                            .unwrap()
-                            .as_secs_f64(),
-                        device.transmit_packets - old_stats.transmit_packets,
-                        transmit_bytes,
-                        device.receive_packets - old_stats.receive_packets,
-                        receive_bytes
+                dump_file
+                    .write_all(
+                        format!(
+                            "{}\t{}\t{}\t{}\t{}\n",
+                            SystemTime::now()
+                                .duration_since(SystemTime::UNIX_EPOCH)
+                                .unwrap()
+                                .as_secs_f64(),
+                            device.transmit_packets - old_stats.transmit_packets,
+                            transmit_bytes,
+                            device.receive_packets - old_stats.receive_packets,
+                            receive_bytes
+                        )
+                        .as_bytes(),
                     )
-                    .as_bytes(),
-                )
-                .expect("Failed to write data");
+                    .expect("Failed to write data");
                 let transmit_capacity =
                     ((transmit_bytes as f64 * 8_f64) / (CAPACITY as f64)) * 100_f64;
                 let receive_capacity =
@@ -102,6 +116,18 @@ fn main() {
                                 .unwrap()
                                 .as_secs_f64()
                         );
+                        events_file
+                            .write_all(
+                                format!(
+                                    "{}\t>= 90% capacity\t",
+                                    SystemTime::now()
+                                        .duration_since(SystemTime::UNIX_EPOCH)
+                                        .unwrap()
+                                        .as_secs_f64(),
+                                )
+                                .as_bytes(),
+                            )
+                            .expect("Failed to write data");
                         capacity_kind = CapacityKind::NinetyPercent;
                     }
                 } else if transmit_capacity >= 80.0 || receive_capacity >= 80.0 {
@@ -113,6 +139,18 @@ fn main() {
                                 .unwrap()
                                 .as_secs_f64()
                         );
+                        events_file
+                            .write_all(
+                                format!(
+                                    "{}\t>= 80% capacity\t",
+                                    SystemTime::now()
+                                        .duration_since(SystemTime::UNIX_EPOCH)
+                                        .unwrap()
+                                        .as_secs_f64(),
+                                )
+                                .as_bytes(),
+                            )
+                            .expect("Failed to write data");
                         capacity_kind = CapacityKind::EightyPercent;
                     }
                 } else if transmit_capacity >= 50.0 || receive_capacity >= 50.0 {
@@ -124,6 +162,18 @@ fn main() {
                                 .unwrap()
                                 .as_secs_f64()
                         );
+                        events_file
+                            .write_all(
+                                format!(
+                                    "{}\t>= 50% capacity\t",
+                                    SystemTime::now()
+                                        .duration_since(SystemTime::UNIX_EPOCH)
+                                        .unwrap()
+                                        .as_secs_f64(),
+                                )
+                                .as_bytes(),
+                            )
+                            .expect("Failed to write data");
                         capacity_kind = CapacityKind::FiftyPercent;
                     }
                 } else if capacity_kind != CapacityKind::BelowFiftyPercent {
@@ -135,6 +185,18 @@ fn main() {
                             .unwrap()
                             .as_secs_f64()
                     );
+                    events_file
+                        .write_all(
+                            format!(
+                                "{}\t< 50% capacity\t",
+                                SystemTime::now()
+                                    .duration_since(SystemTime::UNIX_EPOCH)
+                                    .unwrap()
+                                    .as_secs_f64(),
+                            )
+                            .as_bytes(),
+                        )
+                        .expect("Failed to write data");
                 }
                 old_stats = device;
             }
