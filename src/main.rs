@@ -112,7 +112,7 @@ fn main() {
                     if capacity_kind != CapacityKind::NinetyPercent {
                         println!(">= 90% capacity {}", time_now);
                         events_file
-                            .write_all(format!("{}\t>= 90%\n", time_now).as_bytes())
+                            .write_all(format!("{}\t>=90%\n", time_now).as_bytes())
                             .expect("Failed to write data");
                         capacity_kind = CapacityKind::NinetyPercent;
                     }
@@ -120,7 +120,7 @@ fn main() {
                     if capacity_kind != CapacityKind::EightyPercent {
                         println!(">= 80% capacity {}", time_now);
                         events_file
-                            .write_all(format!("{}\t>= 80%\n", time_now).as_bytes())
+                            .write_all(format!("{}\t>=80%\n", time_now).as_bytes())
                             .expect("Failed to write data");
                         capacity_kind = CapacityKind::EightyPercent;
                     }
@@ -134,7 +134,7 @@ fn main() {
                                 .as_secs_f64()
                         );
                         events_file
-                            .write_all(format!("{}\t>= 50%\n", time_now).as_bytes())
+                            .write_all(format!("{}\t>=50%\n", time_now).as_bytes())
                             .expect("Failed to write data");
                         capacity_kind = CapacityKind::FiftyPercent;
                     }
@@ -142,7 +142,7 @@ fn main() {
                     capacity_kind = CapacityKind::BelowFiftyPercent;
                     println!("< 50% capacity {}", time_now);
                     events_file
-                        .write_all(format!("{}\t< 50%\n", time_now).as_bytes())
+                        .write_all(format!("{}\t<50%\n", time_now).as_bytes())
                         .expect("Failed to write data");
                 }
                 old_stats = device;
