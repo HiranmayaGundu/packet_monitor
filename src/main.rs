@@ -9,9 +9,7 @@ use dev_parser::Device;
 
 pub mod dev_parser;
 
-// const BOUND_IP_ADDR: &'static str = "10.1.3.3:0";
-
-const BOUND_IP_ADDR: &'static str = "127.0.0.1:0";
+const BOUND_IP_ADDR: &'static str = "10.1.3.3:0";
 const CAPACITY: u64 = 100 * 10_u64.pow(6);
 
 #[derive(PartialEq)]
