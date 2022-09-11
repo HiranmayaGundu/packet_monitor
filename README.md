@@ -17,6 +17,9 @@ curl --proto "=https" --tlsv1.2 --retry 3 -sSfL https://sh.rustup.rs | sh -s -- 
 sudo apt install -y build-essential
 ```
 
+To do an offline install as required on DETER, please follow the following instructions:
+[https://hackmd.io/@dpjungmin/install-rust-in-deter](https://hackmd.io/@dpjungmin/install-rust-in-deter)
+
 ### Build
 
 There are three ways to build the packet monitor.
