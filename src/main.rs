@@ -1,11 +1,11 @@
+use clap::Parser;
+use dev_parser::Device;
 use std::{
     fs::OpenOptions,
     io::Write,
     thread,
     time::{Duration, SystemTime},
 };
-
-use dev_parser::Device;
 
 pub mod dev_parser;
 
@@ -20,10 +20,24 @@ enum CapacityKind {
     BelowFiftyPercent,
 }
 
+/// Application that monitors packets by reading /proc/net/dev
+#[derive(Parser, Debug)]
+#[clap(author, version, about, long_about = None)]
+struct Cli {
+    /// The interface to monitor
+    interface: String,
+}
+
 fn main() {
     if cfg!(target_os = "linux") != true {
         panic!("This program only works on Linux");
     }
+
+    let args = Cli::parse();
+
+    let interface_name = args.interface;
+
+    println!("Listening on interface: {}", interface_name);
 
     let mut dump_file = OpenOptions::new()
         .read(true)
@@ -48,20 +62,6 @@ fn main() {
     events_file
         .write_all(b"#tsv\ttime\tevent\n")
         .expect("The events header failed to write");
-
-    // Usage of external nix crate
-    let interfaces = nix::ifaddrs::getifaddrs().unwrap();
-    let mut interface_name = String::new();
-    for interface in interfaces {
-        match interface.address {
-            Some(address) => {
-                if address.to_string() == BOUND_IP_ADDR {
-                    interface_name = interface.interface_name;
-                }
-            }
-            None => {}
-        }
-    }
 
     if interface_name.is_empty() {
         panic!("Could not find interface with IP address {}", BOUND_IP_ADDR);
