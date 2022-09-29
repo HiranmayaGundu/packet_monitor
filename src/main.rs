@@ -3,6 +3,7 @@ use dev_parser::Device;
 use std::{
     fs::OpenOptions,
     io::Write,
+    path::PathBuf,
     thread,
     time::{Duration, SystemTime},
 };
@@ -10,7 +11,6 @@ use std::{
 pub mod dev_parser;
 
 const BOUND_IP_ADDR: &'static str = "10.1.3.3:0";
-const CAPACITY: u64 = 100 * 10_u64.pow(6);
 
 #[derive(PartialEq)]
 enum CapacityKind {
@@ -26,6 +26,12 @@ enum CapacityKind {
 struct Cli {
     /// The interface to monitor
     interface: String,
+    /// The directory to write the log file to
+    #[arg(short, long, value_name = "DIRECTORY")]
+    output_directory: Option<PathBuf>,
+    /// The capacity of the link. Defaults to 50mbps
+    #[arg(short, long)]
+    capacity: Option<u64>,
 }
 
 fn main() {
@@ -35,8 +41,14 @@ fn main() {
 
     let args = Cli::parse();
 
-    let interface_name = args.interface;
+    let working_dir = args
+        .output_directory
+        .unwrap_or(std::env::current_dir().unwrap());
 
+    let interface_name = args.interface;
+    let capacity: f64 = args.capacity.unwrap_or(50) as f64 * 10_u64.pow(6) as f64;
+
+    println!("Working directory: {:?}", working_dir);
     println!("Listening on interface: {}", interface_name);
 
     let mut dump_file = OpenOptions::new()
@@ -44,7 +56,7 @@ fn main() {
         .write(true)
         .create(true)
         .truncate(true)
-        .open("dump.tsv")
+        .open(working_dir.join("dump.tsv"))
         .unwrap();
 
     dump_file
@@ -56,7 +68,7 @@ fn main() {
         .write(true)
         .create(true)
         .truncate(true)
-        .open("events.tsv")
+        .open(working_dir.join("events.tsv"))
         .unwrap();
 
     events_file
@@ -103,10 +115,8 @@ fn main() {
                         .as_bytes(),
                     )
                     .expect("Failed to write data");
-                let transmit_capacity =
-                    ((transmit_bytes as f64 * 8_f64) / (CAPACITY as f64)) * 100_f64;
-                let receive_capacity =
-                    ((receive_bytes as f64 * 8_f64) / (CAPACITY as f64)) * 100_f64;
+                let transmit_capacity = ((transmit_bytes as f64 * 8_f64) / capacity) * 100_f64;
+                let receive_capacity = ((receive_bytes as f64 * 8_f64) / capacity) * 100_f64;
 
                 if transmit_capacity >= 90.0 || receive_capacity >= 90.0 {
                     if capacity_kind != CapacityKind::NinetyPercent {
