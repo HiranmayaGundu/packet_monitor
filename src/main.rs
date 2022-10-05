@@ -26,6 +26,7 @@ enum CapacityKind {
 enum Mode {
     PathPrepend,
     DropPacket,
+    None,
 }
 
 /// Application that monitors packets by reading /proc/net/dev
@@ -45,7 +46,7 @@ struct Cli {
     threshold_capacity_percent: Option<u64>,
     /// The mode to use when the threshold is reached.
     #[arg(short, long, value_enum)]
-    defense_mode: Mode,
+    defense_mode: Option<Mode>,
 }
 
 fn main() {
@@ -219,14 +220,16 @@ fn main() {
             }
         }
         if count >= 3 {
-            println!("Capacity exceeded for 3 seconds");
             if defense_deployed == false {
-                match args.defense_mode {
+                match args.defense_mode.unwrap_or(Mode::None) {
                     Mode::DropPacket => {
                         let output = iptables_command
                             .output()
                             .expect("Failed to execute iptables command");
                         println!("executed iptables command with status {}", output.status);
+                        events_file
+                            .write_all("#iptables command executed\n".as_bytes())
+                            .expect("failed to write event");
                     }
                     Mode::PathPrepend => {
                         let mut file = OpenOptions::new()
@@ -262,7 +265,15 @@ fn main() {
                                 .as_bytes(),
                         )
                         .expect("Failed to write to bgpd.conf");
+                        let output = quagga_restart_command
+                            .output()
+                            .expect("Failed to execute quagga restart command");
+                        println!("executed path prepend defense {}", output.status);
+                        events_file
+                            .write_all("#path prepend defense executed\n".as_bytes())
+                            .expect("failed to write event");
                     }
+                    Mode::None => {}
                 }
 
                 defense_deployed = true;
