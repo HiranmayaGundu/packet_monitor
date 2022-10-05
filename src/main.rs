@@ -265,6 +265,9 @@ fn main() {
                                 .as_bytes(),
                         )
                         .expect("Failed to write to bgpd.conf");
+                        events_file
+                            .write_all("#About to restart quagga\n".as_bytes())
+                            .expect("failed to write event");
                         let output = quagga_restart_command
                             .output()
                             .expect("Failed to execute quagga restart command");
