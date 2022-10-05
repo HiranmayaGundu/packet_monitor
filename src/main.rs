@@ -1,9 +1,10 @@
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 use dev_parser::Device;
 use std::{
     fs::OpenOptions,
     io::Write,
     path::PathBuf,
+    process::Command,
     thread,
     time::{Duration, SystemTime},
 };
@@ -16,8 +17,15 @@ const BOUND_IP_ADDR: &'static str = "10.1.3.3:0";
 enum CapacityKind {
     NinetyPercent,
     EightyPercent,
+    SeventyPercent,
     FiftyPercent,
     BelowFiftyPercent,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
+enum Mode {
+    PathPrepend,
+    DropPacket,
 }
 
 /// Application that monitors packets by reading /proc/net/dev
@@ -32,6 +40,12 @@ struct Cli {
     /// The capacity of the link. Defaults to 50mbps
     #[arg(short, long)]
     capacity: Option<u64>,
+    /// The capacity of the link. Defaults to 70% of capacity
+    #[arg(short, long)]
+    threshold_capacity_percent: Option<u64>,
+    /// The mode to use when the threshold is reached.
+    #[arg(short, long, value_enum)]
+    defense_mode: Mode,
 }
 
 fn main() {
@@ -41,12 +55,40 @@ fn main() {
 
     let args = Cli::parse();
 
+    let mut iptables_command = Command::new("iptables");
+    iptables_command
+        .arg("-A")
+        .arg("INPUT")
+        .arg("-p")
+        .arg("udp")
+        .arg("--dport")
+        .arg("53")
+        .arg("-m")
+        .arg("string")
+        .arg("--from")
+        .arg("28")
+        .arg("--algo")
+        .arg("bm")
+        .arg("--hex-string")
+        .arg("|06|victim|03|com|02|uk")
+        .arg("-j")
+        .arg("DROP");
+
+    let mut quagga_restart_command = Command::new("systemctl");
+    quagga_restart_command.arg("restart").arg("quagga");
+
+    let uid = nix::unistd::getuid();
+    if uid != nix::unistd::Uid::from_raw(0) {
+        panic!("This program must be run as root");
+    }
+
     let working_dir = args
         .output_directory
         .unwrap_or(std::env::current_dir().unwrap());
 
     let interface_name = args.interface;
     let capacity: f64 = args.capacity.unwrap_or(50) as f64 * 10_u64.pow(6) as f64;
+    let threshold_capacity_percent: f64 = args.threshold_capacity_percent.unwrap_or(70) as f64;
 
     println!("Working directory: {:?}", working_dir);
     println!("Listening on interface: {}", interface_name);
@@ -92,6 +134,8 @@ fn main() {
     }
 
     let mut capacity_kind = CapacityKind::BelowFiftyPercent;
+    let mut count = 0;
+    let mut defense_deployed = false;
     loop {
         let devices = dev_parser::get();
         for device in devices {
@@ -118,6 +162,14 @@ fn main() {
                 let transmit_capacity = ((transmit_bytes as f64 * 8_f64) / capacity) * 100_f64;
                 let receive_capacity = ((receive_bytes as f64 * 8_f64) / capacity) * 100_f64;
 
+                if transmit_capacity >= threshold_capacity_percent
+                    || receive_capacity >= threshold_capacity_percent
+                {
+                    count += 1;
+                } else {
+                    count = 0;
+                }
+
                 if transmit_capacity >= 90.0 || receive_capacity >= 90.0 {
                     if capacity_kind != CapacityKind::NinetyPercent {
                         println!(">= 90% capacity {}", time_now);
@@ -133,6 +185,14 @@ fn main() {
                             .write_all(format!("{}\t>=80%\n", time_now).as_bytes())
                             .expect("Failed to write data");
                         capacity_kind = CapacityKind::EightyPercent;
+                    }
+                } else if transmit_capacity >= 70.0 || receive_capacity >= 70.0 {
+                    if capacity_kind != CapacityKind::SeventyPercent {
+                        println!(">= 70% capacity {}", time_now);
+                        events_file
+                            .write_all(format!("{}\t>=70%\n", time_now).as_bytes())
+                            .expect("Failed to write data");
+                        capacity_kind = CapacityKind::SeventyPercent;
                     }
                 } else if transmit_capacity >= 50.0 || receive_capacity >= 50.0 {
                     if capacity_kind != CapacityKind::FiftyPercent {
@@ -156,6 +216,56 @@ fn main() {
                         .expect("Failed to write data");
                 }
                 old_stats = device;
+            }
+        }
+        if count >= 3 {
+            println!("Capacity exceeded for 3 seconds");
+            if defense_deployed == false {
+                match args.defense_mode {
+                    Mode::DropPacket => {
+                        let output = iptables_command
+                            .output()
+                            .expect("Failed to execute iptables command");
+                        println!("executed iptables command with status {}", output.status);
+                    }
+                    Mode::PathPrepend => {
+                        let mut file = OpenOptions::new()
+                            .read(true)
+                            .write(true)
+                            .truncate(true)
+                            .open("/etc/quagga/bgpd.conf")
+                            .expect("Failed to open bgpd.conf");
+                        file.write_all(
+                            r#"!
+                        hostname Router
+                        password zebra
+                        enable password zebra
+                        log stdout
+                        !
+                        bgp config-type cisco
+                        !
+                        router bgp 65004
+                         no synchronization
+                         bgp router-id 10.1.4.1
+                         network 10.1.3.0 mask 255.255.255.0
+                         network 10.1.200.0 mask 255.255.255.0
+                         neighbor 10.1.3.2 remote-as 65003
+                         neighbor 10.1.3.2 route-map prepend out
+                         no auto-summary
+                        !
+                        route-map prepend permit 10
+                         set as-path prepend 65004
+                        !
+                        line vty
+                        !
+                        end"#
+                                .as_bytes(),
+                        )
+                        .expect("Failed to write to bgpd.conf");
+                    }
+                }
+
+                defense_deployed = true;
             }
         }
         thread::sleep(Duration::from_secs(1));

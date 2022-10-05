@@ -66,7 +66,15 @@ This puts the built binary in `target/x86_64-unknown-linux-gnu/release/`.
 ### Usage
 
 ```bash
-./proja
+./proja -d drop-packet <INTERFACE>
+```
+
+This program HAS to be run with root privileges (since it may modify iptables or /etc/quagga/bgpd.conf).
+
+For detailed usage, please use
+
+```bash
+./proja --help
 ```
 
 The data tsv file that is generated is called `dump.tsv`
