@@ -1,12 +1,16 @@
 use clap::{Parser, ValueEnum};
 use dev_parser::Device;
 use std::{
-    fs::OpenOptions,
-    io::Write,
     path::PathBuf,
-    process::Command,
+    sync::Arc,
     thread,
     time::{Duration, SystemTime},
+};
+use tokio::{
+    fs::{File, OpenOptions},
+    io::AsyncWriteExt,
+    process::Command,
+    sync::Mutex,
 };
 
 pub mod dev_parser;
@@ -49,15 +53,72 @@ struct Cli {
     defense_mode: Option<Mode>,
 }
 
-fn main() {
-    if cfg!(target_os = "linux") != true {
-        panic!("This program only works on Linux");
-    }
+async fn restart_quagga(file: Arc<Mutex<File>>) {
+    let time_now = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_secs_f64();
+    let mut bgp_file = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .truncate(true)
+        .open("/etc/quagga/bgpd.conf")
+        .await
+        .expect("Failed to open bgpd.conf");
+    bgp_file
+        .write_all(
+            r#"!
+                        hostname Router
+                        password zebra
+                        enable password zebra
+                        log stdout
+                        !
+                        bgp config-type cisco
+                        !
+                        router bgp 65004
+                         no synchronization
+                         bgp router-id 10.1.4.1
+                         network 10.1.3.0 mask 255.255.255.0
+                         network 10.1.200.0 mask 255.255.255.0
+                         neighbor 10.1.3.2 remote-as 65003
+                         neighbor 10.1.3.2 route-map prepend out
+                         no auto-summary
+                        !
+                        route-map prepend permit 10
+                         set as-path prepend 65004
+                        !
+                        line vty
+                        !
+                        end"#
+                .as_bytes(),
+        )
+        .await
+        .expect("Failed to write to bgpd.conf");
+    write_to_events(
+        Arc::clone(&file),
+        format!("#About to restart quagga at {}\n", time_now).as_bytes(),
+    )
+    .await;
+    let output = Command::new("systemctl")
+        .arg("restart")
+        .arg("quagga")
+        .output()
+        .await
+        .unwrap();
+    println!("executed path prepend defense {}", output.status);
+    let time_now = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_secs_f64();
+    write_to_events(
+        Arc::clone(&file),
+        format!("#Restarted quagga at {}\n", time_now).as_bytes(),
+    )
+    .await;
+}
 
-    let args = Cli::parse();
-
-    let mut iptables_command = Command::new("iptables");
-    iptables_command
+async fn deploy_ip_tables_block(file: Arc<Mutex<File>>) {
+    let output = Command::new("iptables")
         .arg("-A")
         .arg("INPUT")
         .arg("-p")
@@ -73,10 +134,35 @@ fn main() {
         .arg("--hex-string")
         .arg("|06|victim|03|com|02|uk")
         .arg("-j")
-        .arg("DROP");
+        .arg("DROP")
+        .output()
+        .await
+        .unwrap();
+    println!("executed drop packet defense {}", output.status);
+    let time_now = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_secs_f64();
+    write_to_events(
+        file,
+        format!("#Dropped packets from {} at {}\n", BOUND_IP_ADDR, time_now).as_bytes(),
+    )
+    .await;
+}
 
-    let mut quagga_restart_command = Command::new("systemctl");
-    quagga_restart_command.arg("restart").arg("quagga");
+async fn write_to_events(events_handle: Arc<Mutex<File>>, buf: &[u8]) {
+    let mut events = events_handle.lock().await;
+    events.write_all(buf).await.unwrap();
+    drop(events);
+}
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    if cfg!(target_os = "linux") != true {
+        panic!("This program only works on Linux");
+    }
+
+    let args = Cli::parse();
 
     let uid = nix::unistd::getuid();
     if uid != nix::unistd::Uid::from_raw(0) {
@@ -100,23 +186,23 @@ fn main() {
         .create(true)
         .truncate(true)
         .open(working_dir.join("dump.tsv"))
-        .unwrap();
+        .await?;
 
     dump_file
-        .write_all(b"#tsv\ttime\ttxpkts\ttxbytes\trxpkts\trxbytes\n")
-        .expect("Failed to write header");
+        .write(b"#tsv\ttime\ttxpkts\ttxbytes\trxpkts\trxbytes\n")
+        .await?;
 
-    let mut events_file = OpenOptions::new()
-        .read(true)
-        .write(true)
-        .create(true)
-        .truncate(true)
-        .open(working_dir.join("events.tsv"))
-        .unwrap();
+    let events_handle = Arc::new(Mutex::new(
+        OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(working_dir.join("events.tsv"))
+            .await?,
+    ));
 
-    events_file
-        .write_all(b"#tsv\ttime\tevent\n")
-        .expect("The events header failed to write");
+    write_to_events(Arc::clone(&events_handle), b"#tsv\ttime\tevent\n").await;
 
     if interface_name.is_empty() {
         panic!("Could not find interface with IP address {}", BOUND_IP_ADDR);
@@ -137,18 +223,20 @@ fn main() {
     let mut capacity_kind = CapacityKind::BelowFiftyPercent;
     let mut count = 0;
     let mut defense_deployed = false;
+
     loop {
+        let time_now = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_secs_f64();
         let devices = dev_parser::get();
         for device in devices {
             if device.interface == interface_name {
                 let transmit_bytes = device.transmit_bytes - old_stats.transmit_bytes;
                 let receive_bytes = device.receive_bytes - old_stats.receive_bytes;
-                let time_now = SystemTime::now()
-                    .duration_since(SystemTime::UNIX_EPOCH)
-                    .unwrap()
-                    .as_secs_f64();
+
                 dump_file
-                    .write_all(
+                    .write(
                         format!(
                             "{}\t{}\t{}\t{}\t{}\n",
                             time_now,
@@ -159,7 +247,7 @@ fn main() {
                         )
                         .as_bytes(),
                     )
-                    .expect("Failed to write data");
+                    .await?;
                 let transmit_capacity = ((transmit_bytes as f64 * 8_f64) / capacity) * 100_f64;
                 let receive_capacity = ((receive_bytes as f64 * 8_f64) / capacity) * 100_f64;
 
@@ -174,25 +262,31 @@ fn main() {
                 if transmit_capacity >= 90.0 || receive_capacity >= 90.0 {
                     if capacity_kind != CapacityKind::NinetyPercent {
                         println!(">= 90% capacity {}", time_now);
-                        events_file
-                            .write_all(format!("{}\t>=90%\n", time_now).as_bytes())
-                            .expect("Failed to write data");
+                        write_to_events(
+                            Arc::clone(&events_handle),
+                            format!("{}\t>=90%\n", time_now).as_bytes(),
+                        )
+                        .await;
                         capacity_kind = CapacityKind::NinetyPercent;
                     }
                 } else if transmit_capacity >= 80.0 || receive_capacity >= 80.0 {
                     if capacity_kind != CapacityKind::EightyPercent {
                         println!(">= 80% capacity {}", time_now);
-                        events_file
-                            .write_all(format!("{}\t>=80%\n", time_now).as_bytes())
-                            .expect("Failed to write data");
+                        write_to_events(
+                            Arc::clone(&events_handle),
+                            format!("{}\t>=80%\n", time_now).as_bytes(),
+                        )
+                        .await;
                         capacity_kind = CapacityKind::EightyPercent;
                     }
                 } else if transmit_capacity >= 70.0 || receive_capacity >= 70.0 {
                     if capacity_kind != CapacityKind::SeventyPercent {
                         println!(">= 70% capacity {}", time_now);
-                        events_file
-                            .write_all(format!("{}\t>=70%\n", time_now).as_bytes())
-                            .expect("Failed to write data");
+                        write_to_events(
+                            Arc::clone(&events_handle),
+                            format!("{}\t>=70%\n", time_now).as_bytes(),
+                        )
+                        .await;
                         capacity_kind = CapacityKind::SeventyPercent;
                     }
                 } else if transmit_capacity >= 50.0 || receive_capacity >= 50.0 {
@@ -204,77 +298,38 @@ fn main() {
                                 .unwrap()
                                 .as_secs_f64()
                         );
-                        events_file
-                            .write_all(format!("{}\t>=50%\n", time_now).as_bytes())
-                            .expect("Failed to write data");
+                        write_to_events(
+                            Arc::clone(&events_handle),
+                            format!("{}\t>=50%\n", time_now).as_bytes(),
+                        )
+                        .await;
                         capacity_kind = CapacityKind::FiftyPercent;
                     }
                 } else if capacity_kind != CapacityKind::BelowFiftyPercent {
                     capacity_kind = CapacityKind::BelowFiftyPercent;
                     println!("< 50% capacity {}", time_now);
-                    events_file
-                        .write_all(format!("{}\t<50%\n", time_now).as_bytes())
-                        .expect("Failed to write data");
+                    write_to_events(
+                        Arc::clone(&events_handle),
+                        format!("{}\t<50%\n", time_now).as_bytes(),
+                    )
+                    .await;
                 }
                 old_stats = device;
             }
         }
         if count >= 3 {
             if defense_deployed == false {
+                let cloned_handle = Arc::clone(&events_handle);
                 match args.defense_mode.unwrap_or(Mode::None) {
                     Mode::DropPacket => {
-                        let output = iptables_command
-                            .output()
-                            .expect("Failed to execute iptables command");
-                        println!("executed iptables command with status {}", output.status);
-                        events_file
-                            .write_all("#iptables command executed\n".as_bytes())
-                            .expect("failed to write event");
+                        tokio::spawn(async move {
+                            deploy_ip_tables_block(cloned_handle).await;
+                        });
                     }
                     Mode::PathPrepend => {
-                        let mut file = OpenOptions::new()
-                            .read(true)
-                            .write(true)
-                            .truncate(true)
-                            .open("/etc/quagga/bgpd.conf")
-                            .expect("Failed to open bgpd.conf");
-                        file.write_all(
-                            r#"!
-                        hostname Router
-                        password zebra
-                        enable password zebra
-                        log stdout
-                        !
-                        bgp config-type cisco
-                        !
-                        router bgp 65004
-                         no synchronization
-                         bgp router-id 10.1.4.1
-                         network 10.1.3.0 mask 255.255.255.0
-                         network 10.1.200.0 mask 255.255.255.0
-                         neighbor 10.1.3.2 remote-as 65003
-                         neighbor 10.1.3.2 route-map prepend out
-                         no auto-summary
-                        !
-                        route-map prepend permit 10
-                         set as-path prepend 65004
-                        !
-                        line vty
-                        !
-                        end"#
-                                .as_bytes(),
-                        )
-                        .expect("Failed to write to bgpd.conf");
-                        events_file
-                            .write_all("#About to restart quagga\n".as_bytes())
-                            .expect("failed to write event");
-                        let output = quagga_restart_command
-                            .output()
-                            .expect("Failed to execute quagga restart command");
-                        println!("executed path prepend defense {}", output.status);
-                        events_file
-                            .write_all("#path prepend defense executed\n".as_bytes())
-                            .expect("failed to write event");
+                        tokio::spawn(
+                            async move { restart_quagga(Arc::clone(&cloned_handle)).await },
+                        );
                     }
                     Mode::None => {}
                 }

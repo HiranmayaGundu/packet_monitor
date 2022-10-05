@@ -8,6 +8,7 @@ edition = "2021"
 [dependencies]
 nix = "0.25.0"
 clap = { version = "4.0", features = ["derive"] }
+tokio = { version = "1", features = ["full"] }
 
 [package.metadata.cross.target.x86_64-unknown-linux-gnu]
 dockerfile = "./Dockerfile"
