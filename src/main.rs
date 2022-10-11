@@ -15,8 +15,6 @@ use tokio::{
 
 pub mod dev_parser;
 
-const BOUND_IP_ADDR: &'static str = "10.1.3.3:0";
-
 #[derive(PartialEq)]
 enum CapacityKind {
     NinetyPercent,
@@ -145,7 +143,7 @@ async fn deploy_ip_tables_block(file: Arc<Mutex<File>>) {
         .as_secs_f64();
     write_to_events(
         file,
-        format!("#Dropped packets from {} at {}\n", BOUND_IP_ADDR, time_now).as_bytes(),
+        format!("#Dropped packets at {}\n", time_now).as_bytes(),
     )
     .await;
 }
@@ -203,10 +201,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     ));
 
     write_to_events(Arc::clone(&events_handle), b"#tsv\ttime\tevent\n").await;
-
-    if interface_name.is_empty() {
-        panic!("Could not find interface with IP address {}", BOUND_IP_ADDR);
-    }
 
     let mut old_stats = Device::new();
     let devices = dev_parser::get();
