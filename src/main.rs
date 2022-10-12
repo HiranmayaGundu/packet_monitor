@@ -1,3 +1,4 @@
+// usage of clap for argument parsing
 use clap::{Parser, ValueEnum};
 use dev_parser::Device;
 use std::{
@@ -6,6 +7,10 @@ use std::{
     thread,
     time::{Duration, SystemTime},
 };
+// Usage of external library tokio for the following functions:
+// - tokio::fs::File: async file read / write
+// - process::Command: async process execution
+// - Mutes: Lock file between thread
 use tokio::{
     fs::{File, OpenOptions},
     io::AsyncWriteExt,
@@ -30,6 +35,8 @@ enum Mode {
     DropPacket,
     None,
 }
+
+// Usage of clap below
 
 /// Application that monitors packets by reading /proc/net/dev
 #[derive(Parser, Debug)]

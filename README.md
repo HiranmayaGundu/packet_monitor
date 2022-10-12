@@ -79,3 +79,10 @@ For detailed usage, please use
 
 The data tsv file that is generated is called `dump.tsv`
 The extreme events file is called `events.tsv`. These events are also printed to stdout.
+
+### External Dependencies
+
+The project uses the two following external dependencies:
+
+- clap - Used for argument parsing
+- tokio - Async runtime with async versions of the standard library

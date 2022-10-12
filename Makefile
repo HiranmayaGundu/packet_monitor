@@ -21,11 +21,11 @@ build:
 	cargo build $(release)
 
 move:
-	cp target/$(target)/$(prog) ./proja
+	cp target/$(target)/$(prog) ./projb
 
 clean:
 	cargo clean
-	rm ./proja
+	rm ./projb
 
 all: build move
  
