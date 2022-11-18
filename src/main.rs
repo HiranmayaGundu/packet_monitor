@@ -24,15 +24,15 @@ pub mod dev_parser;
 enum CapacityKind {
     NinetyPercent,
     EightyPercent,
-    SeventyPercent,
-    FiftyPercent,
-    BelowFiftyPercent,
+    SeventyFivePercent,
+    BelowSeventyFivePercent,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
 enum Mode {
     PathPrepend,
     DropPacket,
+    Scrub,
     None,
 }
 
@@ -95,6 +95,66 @@ async fn restart_quagga(file: Arc<Mutex<File>>) {
                         line vty
                         !
                         end"#
+                .as_bytes(),
+        )
+        .await
+        .expect("Failed to write to bgpd.conf");
+    write_to_events(
+        Arc::clone(&file),
+        format!("#About to restart quagga at {}\n", time_now).as_bytes(),
+    )
+    .await;
+    let output = Command::new("systemctl")
+        .arg("restart")
+        .arg("quagga")
+        .output()
+        .await
+        .unwrap();
+    println!("executed path prepend defense {}", output.status);
+    let time_now = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_secs_f64();
+    write_to_events(
+        Arc::clone(&file),
+        format!("#Restarted quagga at {}\n", time_now).as_bytes(),
+    )
+    .await;
+}
+
+async fn start_scrubbing(file: Arc<Mutex<File>>) {
+    let time_now = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_secs_f64();
+    let mut bgp_file = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .truncate(true)
+        .open("/etc/quagga/bgpd.conf")
+        .await
+        .expect("Failed to open bgpd.conf");
+    bgp_file
+        .write_all(
+            r#"!
+            hostname Router
+            password zebra
+            enable password zebra
+            log stdout
+            !
+            bgp config-type cisco
+            !
+            router bgp 65003
+             no synchronization
+             bgp router-id 10.1.1.3
+             network 10.1.1.0 mask 255.255.255.0
+             network 10.1.200.0 mask 255.255.255.0
+             neighbor 10.1.1.2 remote-as 65002
+             no auto-summary
+            !
+            line vty
+            !
+            end"#
                 .as_bytes(),
         )
         .await
@@ -221,7 +281,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         panic!("Could not find interface {}", interface_name);
     }
 
-    let mut capacity_kind = CapacityKind::BelowFiftyPercent;
+    let mut capacity_kind = CapacityKind::BelowSeventyFivePercent;
     let mut count = 0;
     let mut defense_deployed = false;
 
@@ -280,40 +340,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         .await;
                         capacity_kind = CapacityKind::EightyPercent;
                     }
-                } else if transmit_capacity >= 70.0 || receive_capacity >= 70.0 {
-                    if capacity_kind != CapacityKind::SeventyPercent {
-                        println!(">= 70% capacity {}", time_now);
+                } else if transmit_capacity >= 75.0 || receive_capacity >= 75.0 {
+                    if capacity_kind != CapacityKind::SeventyFivePercent {
+                        println!(">= 75% capacity {}", time_now);
                         write_to_events(
                             Arc::clone(&events_handle),
-                            format!("{}\t>=70%\n", time_now).as_bytes(),
+                            format!("{}\t>=75%\n", time_now).as_bytes(),
                         )
                         .await;
-                        capacity_kind = CapacityKind::SeventyPercent;
+                        capacity_kind = CapacityKind::SeventyFivePercent;
                     }
-                } else if transmit_capacity >= 50.0 || receive_capacity >= 50.0 {
-                    if capacity_kind != CapacityKind::FiftyPercent {
-                        println!(
-                            ">= 50% capacity {}",
-                            SystemTime::now()
-                                .duration_since(SystemTime::UNIX_EPOCH)
-                                .unwrap()
-                                .as_secs_f64()
-                        );
+                } else if transmit_capacity < 75.0 || receive_capacity < 75.0 {
+                    if capacity_kind != CapacityKind::BelowSeventyFivePercent {
+                        capacity_kind = CapacityKind::BelowSeventyFivePercent;
+                        println!("< 75% capacity {}", time_now);
                         write_to_events(
                             Arc::clone(&events_handle),
-                            format!("{}\t>=50%\n", time_now).as_bytes(),
+                            format!("{}\t<75%\n", time_now).as_bytes(),
                         )
                         .await;
-                        capacity_kind = CapacityKind::FiftyPercent;
                     }
-                } else if capacity_kind != CapacityKind::BelowFiftyPercent {
-                    capacity_kind = CapacityKind::BelowFiftyPercent;
-                    println!("< 50% capacity {}", time_now);
-                    write_to_events(
-                        Arc::clone(&events_handle),
-                        format!("{}\t<50%\n", time_now).as_bytes(),
-                    )
-                    .await;
                 }
                 old_stats = device;
             }
@@ -330,6 +376,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     Mode::PathPrepend => {
                         tokio::spawn(
                             async move { restart_quagga(Arc::clone(&cloned_handle)).await },
+                        );
+                    }
+                    Mode::Scrub => {
+                        tokio::spawn(
+                            async move { start_scrubbing(Arc::clone(&cloned_handle)).await },
                         );
                     }
                     Mode::None => {}
