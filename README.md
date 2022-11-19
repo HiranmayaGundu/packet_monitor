@@ -31,7 +31,7 @@ If you are using an Ubuntu 16.04 build machine you can go with methods 1 or 2.
 make
 ```
 
-This generates a binary called `projb` in the current directory.
+This generates a binary called `projc_s1` in the current directory.
 It also generates a binary at `target/release/packet_monitor`.
 
 #### Build with Cargo
@@ -66,7 +66,7 @@ This puts the built binary in `target/x86_64-unknown-linux-gnu/release/`.
 ### Usage
 
 ```bash
-./projb -d none <INTERFACE>
+./projc_s1 -d scrub <INTERFACE>
 ```
 
 This program HAS to be run with root privileges (since it may modify iptables or /etc/quagga/bgpd.conf).
@@ -74,30 +74,16 @@ This program HAS to be run with root privileges (since it may modify iptables or
 For detailed usage, please use
 
 ```bash
-./projb --help
+./projc_s1 --help
 ```
 
 The data tsv file that is generated is called `dump.tsv`
 The extreme events file is called `events.tsv`. These events are also printed to stdout.
 
-### Stage 7
-
-```bash
-./projb -d drop-packet <INTERFACE>
-```
-
-This runs stage 7 defense by running the iptables block.
-
-### Stage 8
-
-```bash
-./projb -d path-prepend <INTERFACE> 
-```
-
-This runs stage 8 defense by writing the path prepend.
 ### External Dependencies
 
 The project uses the two following external dependencies:
 
 - clap - Used for argument parsing
 - tokio - Async runtime with async versions of the standard library
+- nix - to check that the program is running as root
